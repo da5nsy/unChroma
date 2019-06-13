@@ -1,13 +1,5 @@
-% Trying to find a filter that reduces chromatic contrast such that a
-% normal observer becomes an anomalous colour observer.
-
-% Like 'enChroma' but the opposite.
-
-% This version entirely removed energy at each wavelength interval in turn
-% to test the effect on MB chromaticity.
-
-% Then we make a filter out of the relative ability to reduce MB1 and apply
-% that to the colour signals, and recalculate MB chromaticities
+% Second attempt using a more aggressive plan - wipe out everything outside
+% of the L-M correlation window and the S cone sensitivity.
 
 clear, clc, close all
 
@@ -30,6 +22,9 @@ S = S_D65;
 
 clearvars -except SRF SPD SSF S
 
+load T_CIE_Y10.mat
+T_lum = SplineCmf(S_CIE_Y10,T_CIE_Y10,S);
+
 %% Calculate colour signal
 
 CS = SPD.*SRF;
@@ -37,55 +32,43 @@ CS = SPD.*SRF;
 % figure,plot(SToWls(S),SRF)
 % figure,plot(SToWls(S),CS)
 
-for i = 1:S(3)
-    CSm(:,:,i) = CS; %CS modified
-    CSm(i,:,i) = 0;
-end
+%% Compute correlation window
 
-%% Calculate MB chromaticity
-
-load T_CIE_Y10.mat
-T_lum = SplineCmf(S_CIE_Y10,T_CIE_Y10,S);
-
-for i=1:S(3)
-    LMS(:,:,i) = SSF*CSm(:,:,i);
-    MB(:,:,i) = LMSToMacBoyn(LMS(:,:,i),SSF,T_lum);
-end
-
-%% Plot MB over range
 figure, hold on
-for i=1:S(3)
-    scatter(MB(1,:,i),MB(2,:,i),'.')
-    drawnow
-    %pause(0.1)
-end
+CS_c = corr(CS');
+imagesc(CS_c)
+axis image
+colormap gray
 
-%% Compute standard deviation of set over wavelength
+% Overlay SSF
+plot(SSF'*S(3),'--')
 
-for i=1:S(3)
-    sd(i) = std(MB(1,:,i));
-end
-figure, plot(SToWls(S),sd)
+% Visual inspection shows window from roughly 30-43, aka 520 - 590nm
 
-%% Convert sd into a factor to apply to colour signals
+%% Define factor to apply to colour signals
 
-sd2 = sd;
-sd2(sd2>median(sd2)) = median(sd2); %removing this line has some interesting effects
-sd2=sd2-min(sd2);
-sd2=sd2/max(sd2);
-figure, plot(sd2);
+fac = ones(S(3),1);
+
+% Block from 20 to 30 (after roughly half peak of s, till LM correlation window starts) 
+fac(20:30) = 0;
+
+% Block from 43 onwards (after LM correlation window)
+fac(43:end) = 0;
+
+figure, plot(fac)
+
 
 %% Modify colour signals to minimse MB1 variance
 
-CSm2 = CS.*sd2';
+CSm = CS.*fac;
 
 figure, plot(CS)
-figure, plot(CSm2)
+figure, plot(CSm)
 
 %% Calculate MB for colour signals and modified colour signals
 
-LMS1 = SSF*CS;
-LMS2 = SSF*CSm2;
+LMS1 = SSF*CS;  %normal
+LMS2 = SSF*CSm; %modified
 
 MB_LMS1 = LMSToMacBoyn(LMS1,SSF,T_lum);
 MB_LMS2 = LMSToMacBoyn(LMS2,SSF,T_lum);
